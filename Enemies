@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VOID SWARM // 8 Enemy Classes</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #090a0f;
+      color: #e0e6ed;
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #hud {
+      width: 640px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 5px;
+      font-size: 16px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .cyan { color: #05d9e8; }
+    .green { color: #00f59b; }
+    .danger { color: #ff2a6d; }
+    .nightmare { color: #ffbe0b; }
+
+    #gameWrapper {
+      position: relative;
+      width: 640px;
+      height: 700px;
+    }
+    canvas {
+      background: radial-gradient(circle at center, #111625 0%, #05070a 100%);
+      border: 2px solid #05d9e8;
+      box-shadow: 0 0 25px rgba(5, 217, 232, 0.25);
+      display: block;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    canvas.mode-hard {
+      border-color: #ff2a6d;
+      box-shadow: 0 0 25px rgba(255, 42, 109, 0.35);
+    }
+    canvas.mode-nightmare {
+      border-color: #ffbe0b;
+      box-shadow: 0 0 25px rgba(255, 190, 11, 0.35);
+    }
+
+    /* Overlay Menu */
+    #menuOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(9, 10, 15, 0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+    }
+    #menuOverlay h1 {
+      font-size: 42px;
+      letter-spacing: 4px;
+      color: #05d9e8;
+      margin-bottom: 6px;
+      text-shadow: 0 0 12px rgba(5, 217, 232, 0.6);
+    }
+    #menuOverlay p.subtitle {
+      color: #8b9bb4;
+      margin-bottom: 18px;
+      font-size: 14px;
+    }
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .diff-btn {
+      background: #111625;
+      border: 2px solid #05d9e8;
+      color: #e0e6ed;
+      font-family: inherit;
+      padding: 12px 14px;
+      width: 185px;
+      cursor: pointer;
+      text-align: center;
+      transition: transform 0.12s, background 0.15s;
+    }
+    .diff-btn:hover {
+      transform: scale(1.04);
+      background: #192238;
+    }
+    .diff-btn strong {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+    .diff-btn span {
+      font-size: 11px;
+      color: #9aa8be;
+      display: block;
+      line-height: 1.3;
+    }
+    .diff-btn.normal { border-color: #00f59b; }
+    .diff-btn.normal strong { color: #00f59b; }
+    .diff-btn.hard { border-color: #ff2a6d; }
+    .diff-btn.hard strong { color: #ff2a6d; }
+    .diff-btn.nightmare { border-color: #ffbe0b; }
+    .diff-btn.nightmare strong { color: #ffbe0b; }
+
+    /* Enemy Codex Grid on Menu */
+    .codex {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px 18px;
+      text-align: left;
+      background: rgba(17, 22, 37, 0.85);
+      border: 1px solid #26314a;
+      padding: 14px 18px;
+      width: 580px;
+      font-size: 12px;
+    }
+    .codex-title {
+      grid-column: span 2;
+      text-align: center;
+      color: #05d9e8;
+      font-weight: bold;
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid #26314a;
+      padding-bottom: 4px;
+    }
+    .codex-item strong { display: inline-block; width: 95px; }
+
+    #controls {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #7a8999;
+      display: flex;
+      gap: 18px;
+      align-items: center;
+    }
+    #menuBtn {
+      background: transparent;
+      border: 1px solid #7a8999;
+      color: #e0e6ed;
+      font-family: inherit;
+      font-size: 12px;
+      padding: 3px 8px;
+      cursor: pointer;
+    }
+    #menuBtn:hover {
+      border-color: #05d9e8;
+      color: #05d9e8;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="hud">
+    <div>SCORE: <span id="score" class="cyan">0</span></div>
+    <div>LIVES: <span id="lives" class="green">3</span></div>
+    <div>MODE: <span id="modeLabel" class="green">NORMAL</span></div>
+    <div>WAVE: <span id="wave" class="cyan">1</span></div>
+  </div>
+
+  <div id="gameWrapper">
+    <canvas id="gameCanvas" width="640" height="700"></canvas>
+
+    <div id="menuOverlay">
+      <h1>VOID SWARM</h1>
+      <p class="subtitle">SELECT DIFFICULTY TO DEPLOY</p>
+      <div class="btn-group">
+        <button class="diff-btn normal" onclick="startGame('normal')">
+          <strong>NORMAL</strong>
+          <span>3 Lives &bull; Moderate Speed &bull; Balanced Swarm</span>
+        </button>
+        <button class="diff-btn hard" onclick="startGame('hard')">
+          <strong>HARDCORE</strong>
+          <span>1 Life &bull; Fast Swarm &bull; Aggressive AI</span>
+        </button>
+        <button class="diff-btn nightmare" onclick="startGame('nightmare')">
+          <strong>NIGHTMARE</strong>
+          <span>1 Life &bull; Bullet Hell &bull; Relentless Speed</span>
+        </button>
+      </div>
+
+      <div class="codex">
+        <div class="codex-title">8 ENEMY ARCHETYPES</div>
+        <div class="codex-item"><strong style="color:#ff2a6d;">1. GRUNT</strong> Standard vertical shooter</div>
+        <div class="codex-item"><strong style="color:#ffbe0b;">2. SNIPER</strong> Aims directly at your ship</div>
+        <div class="codex-item"><strong style="color:#b5179e;">3. TANK</strong> Heavy 3-HP armored hull</div>
+        <div class="codex-item"><strong style="color:#f72585;">4. STALKER</strong> Dive-bombs toward player</div>
+        <div class="codex-item"><strong style="color:#00f5d4;">5. SPLITTER</strong> Splits into 2 fast drones</div>
+        <div class="codex-item"><strong style="color:#fb5607;">6. BOMBER</strong> Fires 3-way spread shots</div>
+        <div class="codex-item"><strong style="color:#7209b7;">7. PHANTOM</strong> Cloaks &amp; turns intangible</div>
+        <div class="codex-item"><strong style="color:#ff007f;">8. UFO BOSS</strong> High-speed bonus cruiser</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="controls">
+    <span>[A / D] or [LEFT / RIGHT] Move</span>
+    <span>[SPACE] Fire</span>
+    <span>[R] Restart</span>
+    <button id="menuBtn" onclick="openMenu()">CHANGE MODE</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const livesEl = document.getElementById('lives');
+    const modeEl = document.getElementById('modeLabel');
+    const waveEl = document.getElementById('wave');
+    const menuOverlay = document.getElementById('menuOverlay');
+
+    // Difficulty Configurations
+    const DIFFICULTIES = {
+      normal: {
+        label: 'NORMAL',
+        colorClass: 'green',
+        canvasClass: '',
+        lives: 3,
+        baseSpeed: 0.9,
+        speedScale: 1.4,
+        fireChance: 0.025,
+        bulletSpeed: 4.0,
+        diveChance: 0.0025,
+        tankHp: 2,
+        playerCooldown: 14
+      },
+      hard: {
+        label: 'HARDCORE',
+        colorClass: 'danger',
+        canvasClass: 'mode-hard',
+        lives: 1,
+        baseSpeed: 1.45,
+        speedScale: 2.2,
+        fireChance: 0.05,
+        bulletSpeed: 5.2,
+        diveChance: 0.007,
+        tankHp: 3,
+        playerCooldown: 13
+      },
+      nightmare: {
+        label: 'NIGHTMARE',
+        colorClass: 'nightmare',
+        canvasClass: 'mode-nightmare',
+        lives: 1,
+        baseSpeed: 1.9,
+        speedScale: 2.9,
+        fireChance: 0.085,
+        bulletSpeed: 6.3,
+        diveChance: 0.014,
+        tankHp: 4,
+        playerCooldown: 11
+      }
+    };
+
+    let currentDiff = DIFFICULTIES.normal;
+    let currentDiffKey = 'normal';
+
+    // Game State
+    let score = 0;
+    let wave = 1;
+    let lives = 3;
+    let invulnTimer = 0;
+    let gameRunning = false;
+    let gameOver = false;
+    let keys = {};
+    let particles = [];
+    let stars = [];
+    let ufo = null;
+    let ufoTimer = 500;
+
+    // Player Setup
+    const player = {
+      x: canvas.width / 2 - 18,
+      y: canvas.height - 50,
+      width: 36,
+      height: 20,
+      speed: 6.5,
+      cooldown: 0
+    };
+
+    let playerBullets = [];
+    let enemyBullets = [];
+    let enemies = [];
+    let enemyDirection = 1;
+    let enemyDropDistance = 22;
+
+    // Initialize Starfield Background
+    for (let i = 0; i < 75; i++) {
+      stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2,
+        speed: 0.4 + Math.random() * 1.5
+      });
+    }
+
+    // Input Listeners
+    window.addEventListener('keydown', (e) => {
+      keys[e.code] = true;
+      if (e.code === 'Space') e.preventDefault();
+      if (e.code === 'KeyR' && gameOver) startGame(currentDiffKey);
+      if (e.code === 'Escape') openMenu();
+    });
+
+    window.addEventListener('keyup', (e) => {
+      keys[e.code] = false;
+    });
+
+    function openMenu() {
+      gameRunning = false;
+      menuOverlay.style.display = 'flex';
+    }
+
+    function startGame(diffKey) {
+      currentDiffKey = diffKey;
+      currentDiff = DIFFICULTIES[diffKey];
+
+      modeEl.textContent = currentDiff.label;
+      modeEl.className = currentDiff.colorClass;
+      livesEl.className = currentDiff.colorClass;
+      canvas.className = currentDiff.canvasClass;
+
+      score = 0;
+      wave = 1;
+      lives = currentDiff.lives;
+      invulnTimer = 0;
+      gameOver = false;
+      gameRunning = true;
+      ufo = null;
+      ufoTimer = 450;
+
+      player.x = canvas.width / 2 - player.width / 2;
+      playerBullets = [];
+      enemyBullets = [];
+      particles = [];
+
+      scoreEl.textContent = score;
+      livesEl.textContent = lives;
+      waveEl.textContent = wave;
+
+      menuOverlay.style.display = 'none';
+      spawnWave(wave);
+    }
+
+    // Assigns one of the 7 formation enemy types based on row & wave
+    function getEnemyType(row, col, waveNum) {
+      if (row === 0) {
+        return col % 2 === 0 ? 'tank' : 'bomber';
+      }
+      if (row === 1) {
+        return col % 3 === 0 ? 'phantom' : 'sniper';
+      }
+      if (row === 2) {
+        return col % 2 === 0 ? 'splitter' : 'stalker';
+      }
+      return 'grunt';
+    }
+
+    function spawnWave(waveNum) {
+      enemies = [];
+      enemyBullets = [];
+      enemyDirection = 1;
+      const rows = Math.min(4 + Math.floor((waveNum - 1) / 2), 6);
+      const cols = 10;
+      const spacingX = 50;
+      const spacingY = 40;
+      const startX = 65;
+      const startY = 65;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const type = getEnemyType(r, c, waveNum);
+          let hp = 1;
+          let points = 100;
+
+          if (type === 'tank') { hp = currentDiff.tankHp; points = 300; }
+          else if (type === 'bomber') { points = 250; }
+          else if (type === 'phantom') { points = 220; }
+          else if (type === 'sniper') { points = 180; }
+          else if (type === 'splitter') { points = 160; }
+          else if (type === 'stalker') { points = 150; }
+
+          enemies.push({
+            x: startX + c * spacingX,
+            y: startY + r * spacingY,
+            width: 30,
+            height: 22,
+            type: type,
+            hp: hp,
+            maxHp: hp,
+            points: points,
+            diving: false,
+            diveVx: 0,
+            diveVy: 0,
+            cloaked: false,
+            cloakTimer: Math.floor(Math.random() * 180)
+          });
+        }
+      }
+    }
+
+    function createExplosion(x, y, color, count = 16) {
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          x: x,
+          y: y,
+          vx: (Math.random() - 0.5) * 7,
+          vy: (Math.random() - 0.5) * 7,
+          life: 25 + Math.random() * 15,
+          color: color
+        });
+      }
+    }
+
+    function handlePlayerHit() {
+      if (invulnTimer > 0) return;
+
+      lives--;
+      livesEl.textContent = Math.max(0, lives);
+      createExplosion(player.x + player.width / 2, player.y + player.height / 2, '#05d9e8', 35);
+
+      if (lives <= 0) {
+        gameOver = true;
+      } else {
+        invulnTimer = 90;
+        enemyBullets = [];
+        player.x = canvas.width / 2 - player.width / 2;
+      }
+    }
+
+    function fireEnemyWeapon(shooter) {
+      const baseSpd = currentDiff.bulletSpeed + (wave - 1) * 0.3;
+      const cx = shooter.x + shooter.width / 2;
+      const cy = shooter.y + shooter.height;
+
+      if (shooter.type === 'sniper') {
+        // Aimed fast shot
+        const dx = (player.x + player.width / 2) - cx;
+        const dy = player.y - cy;
+        const dist = Math.hypot(dx, dy) || 1;
+        const spd = baseSpd * 1.25;
+        enemyBullets.push({
+          x: cx - 3, y: cy, width: 6, height: 14,
+          vx: (dx / dist) * spd, vy: (dy / dist) * spd, color: '#ffbe0b'
+        });
+      } else if (shooter.type === 'bomber') {
+        // 3-way spread shot
+        [-1.4, 0, 1.4].forEach(vx => {
+          enemyBullets.push({
+            x: cx - 3, y: cy, width: 6, height: 11,
+            vx: vx, vy: baseSpd * 0.9, color: '#fb5607'
+          });
+        });
+      } else if (shooter.type === 'tank') {
+        // Heavy slow plasma orb
+        enemyBullets.push({
+          x: cx - 5, y: cy, width: 10, height: 12,
+          vx: 0, vy: baseSpd * 0.85, color: '#b5179e'
+        });
+      } else {
+        // Standard vertical shot
+        enemyBullets.push({
+          x: cx - 2, y: cy, width: 5, height: 12,
+          vx: 0, vy: baseSpd, color: '#ff2a6d'
+        });
+      }
+    }
+
+    function update() {
+      // Background Stars
+      stars.forEach(s => {
+        s.y += s.speed;
+        if (s.y > canvas.height) {
+          s.y = 0;
+          s.x = Math.random() * canvas.width;
+        }
+      });
+
+      // Particles
+      particles.forEach((p, index) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+        if (p.life <= 0) particles.splice(index, 1);
+      });
+
+      if (!gameRunning || gameOver) return;
+
+      if (invulnTimer > 0) invulnTimer--;
+
+      // Player Movement
+      if ((keys['ArrowLeft'] || keys['KeyA']) && player.x > 10) {
+        player.x -= player.speed;
+      }
+      if ((keys['ArrowRight'] || keys['KeyD']) && player.x < canvas.width - player.width - 10) {
+        player.x += player.speed;
+      }
+
+      // Player Shooting
+      if (player.cooldown > 0) player.cooldown--;
+      if (keys['Space'] && player.cooldown === 0) {
+        playerBullets.push({
+          x: player.x + player.width / 2 - 2,
+          y: player.y,
+          width: 4,
+          height: 14,
+          speed: 10.5
+        });
+        player.cooldown = currentDiff.playerCooldown;
+      }
+
+      // Update Player Bullets
+      for (let i = playerBullets.length - 1; i >= 0; i--) {
+        let b = playerBullets[i];
+        b.y -= b.speed;
+        if (b.y < 0) playerBullets.splice(i, 1);
+      }
+
+      // Enemy #8: UFO Mothership logic
+      if (!ufo) {
+        ufoTimer--;
+        if (ufoTimer <= 0) {
+          const fromLeft = Math.random() < 0.5;
+          ufo = {
+            x: fromLeft ? -45 : canvas.width + 5,
+            y: 22,
+            width: 42,
+            height: 18,
+            vx: fromLeft ? 3.2 : -3.2,
+            points: 500
+          };
+          ufoTimer = 700 + Math.floor(Math.random() * 400);
+        }
+      } else {
+        ufo.x += ufo.vx;
+        if (Math.random() < 0.03) {
+          enemyBullets.push({
+            x: ufo.x + ufo.width / 2, y: ufo.y + ufo.height,
+            width: 6, height: 12, vx: 0, vy: currentDiff.bulletSpeed * 1.1, color: '#ff007f'
+          });
+        }
+        if (ufo.x < -60 || ufo.x > canvas.width + 60) ufo = null;
+      }
+
+      // Dynamic Formation Speed
+      const totalInitial = 40;
+      const remainingRatio = Math.max(0, (totalInitial - enemies.length) / totalInitial);
+      const speedMultiplier = 1 + remainingRatio * currentDiff.speedScale;
+      const currentSpeed = (currentDiff.baseSpeed + (wave - 1) * 0.25) * speedMultiplier;
+
+      let hitWall = false;
+
+      // Update Enemies
+      enemies.forEach(enemy => {
+        // Phantom Cloak Cycle
+        if (enemy.type === 'phantom') {
+          enemy.cloakTimer++;
+          if (enemy.cloakTimer > 210) {
+            enemy.cloaked = !enemy.cloaked;
+            enemy.cloakTimer = 0;
+          }
+        }
+
+        if (enemy.diving) {
+          enemy.x += enemy.diveVx;
+          enemy.y += enemy.diveVy;
+          if (enemy.y > canvas.height) {
+            enemy.y = 50;
+            enemy.diving = false;
+          }
+        } else {
+          const moveSpd = enemy.type === 'drone' ? currentSpeed * 1.35 : currentSpeed;
+          enemy.x += moveSpd * enemyDirection;
+          if (enemy.x <= 12 || enemy.x + enemy.width >= canvas.width - 12) {
+            hitWall = true;
+          }
+        }
+
+        // Check breach
+        if (enemy.y + enemy.height >= player.y) {
+          lives = 0;
+          livesEl.textContent = 0;
+          gameOver = true;
+          createExplosion(player.x + player.width / 2, player.y + player.height / 2, '#05d9e8', 40);
+        }
+      });
+
+      if (hitWall) {
+        enemyDirection *= -1;
+        enemies.forEach(enemy => {
+          if (!enemy.diving) enemy.y += enemyDropDistance;
+        });
+      }
+
+      // Enemy Attacks
+      if (enemies.length > 0) {
+        const fireChance = currentDiff.fireChance + (wave - 1) * 0.007;
+        if (Math.random() < fireChance) {
+          const shooter = enemies[Math.floor(Math.random() * enemies.length)];
+          if (!shooter.cloaked) fireEnemyWeapon(shooter);
+        }
+
+        // Stalker Dive-Bombers
+        if (Math.random() < currentDiff.diveChance + (wave - 1) * 0.002) {
+          const stalkers = enemies.filter(e => !e.diving && (e.type === 'stalker' || currentDiffKey !== 'normal'));
+          if (stalkers.length > 0) {
+            const diver = stalkers[Math.floor(Math.random() * stalkers.length)];
+            diver.diving = true;
+            const dx = (player.x + player.width / 2) - diver.x;
+            const dy = player.y - diver.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            const diveSpeed = 4.6 + wave * 0.25;
+            diver.diveVx = (dx / dist) * diveSpeed;
+            diver.diveVy = (dy / dist) * diveSpeed;
+          }
+        }
+      }
+
+      // Update Enemy Bullets & Player Hit Detection
+      for (let i = enemyBullets.length - 1; i >= 0; i--) {
+        let eb = enemyBullets[i];
+        eb.x += eb.vx;
+        eb.y += eb.vy;
+
+        if (
+          eb.x < player.x + player.width - 4 &&
+          eb.x + eb.width > player.x + 4 &&
+          eb.y < player.y + player.height - 2 &&
+          eb.y + eb.height > player.y + 4
+        ) {
+          enemyBullets.splice(i, 1);
+          handlePlayerHit();
+          continue;
+        }
+
+        if (eb.y > canvas.height || eb.x < -10 || eb.x > canvas.width + 10) {
+          enemyBullets.splice(i, 1);
+        }
+      }
+
+      // Player Bullets vs Enemies & UFO
+      for (let i = playerBullets.length - 1; i >= 0; i--) {
+        let b = playerBullets[i];
+        let bulletConsumed = false;
+
+        // Check UFO hit
+        if (
+          ufo &&
+          b.x < ufo.x + ufo.width &&
+          b.x + b.width > ufo.x &&
+          b.y < ufo.y + ufo.height &&
+          b.y + b.height > ufo.y
+        ) {
+          playerBullets.splice(i, 1);
+          createExplosion(ufo.x + ufo.width / 2, ufo.y + ufo.height / 2, '#ff007f', 28);
+          score += ufo.points;
+          scoreEl.textContent = score;
+          ufo = null;
+          continue;
+        }
+
+        // Check Formation Enemies
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          let e = enemies[j];
+          if (e.cloaked) continue; // Intangible while cloaked
+
+          if (
+            b.x < e.x + e.width &&
+            b.x + b.width > e.x &&
+            b.y < e.y + e.height &&
+            b.y + b.height > e.y
+          ) {
+            playerBullets.splice(i, 1);
+            bulletConsumed = true;
+            e.hp--;
+
+            if (e.hp <= 0) {
+              createExplosion(e.x + e.width / 2, e.y + e.height / 2, getEnemyColor(e));
+              score += e.diving ? e.points + 100 : e.points;
+              scoreEl.textContent = score;
+
+              // Splitter spawns 2 fast mini-drones
+              if (e.type === 'splitter') {
+                [-14, 14].forEach(offset => {
+                  enemies.push({
+                    x: Math.max(15, Math.min(canvas.width - 35, e.x + offset)),
+                    y: e.y,
+                    width: 18,
+                    height: 14,
+                    type: 'drone',
+                    hp: 1,
+                    maxHp: 1,
+                    points: 80,
+                    diving: false,
+                    diveVx: 0,
+                    diveVy: 0,
+                    cloaked: false,
+                    cloakTimer: 0
+                  });
+                });
+              }
+
+              enemies.splice(j, 1);
+            } else {
+              createExplosion(b.x, b.y, '#05d9e8', 6);
+            }
+            break;
+          }
+        }
+        if (bulletConsumed) continue;
+      }
+
+      // Next Wave
+      if (enemies.length === 0) {
+        wave++;
+        waveEl.textContent = wave;
+        spawnWave(wave);
+      }
+    }
+
+    function getEnemyColor(e) {
+      switch (e.type) {
+        case 'grunt': return '#ff2a6d';
+        case 'sniper': return '#ffbe0b';
+        case 'tank': return e.hp > 1 ? '#b5179e' : '#e0aaff';
+        case 'stalker': return '#f72585';
+        case 'splitter': return '#00f5d4';
+        case 'drone': return '#00bbf9';
+        case 'bomber': return '#fb5607';
+        case 'phantom': return '#7209b7';
+        default: return '#ff2a6d';
+      }
+    }
+
+    function drawEnemy(e) {
+      ctx.save();
+      if (e.cloaked) ctx.globalAlpha = 0.25;
+      const color = getEnemyColor(e);
+      ctx.fillStyle = color;
+
+      if (e.type === 'tank') {
+        // Heavy bulky armor block
+        ctx.fillRect(e.x + 2, e.y, e.width - 4, e.height);
+        ctx.fillStyle = '#090a0f';
+        ctx.fillRect(e.x + 6, e.y + 6, e.width - 12, 5);
+      } else if (e.type === 'sniper') {
+        // Sleek diamond/triangle sniper
+        ctx.beginPath();
+        ctx.moveTo(e.x + e.width / 2, e.y + e.height);
+        ctx.lineTo(e.x + e.width, e.y + 4);
+        ctx.lineTo(e.x + e.width / 2, e.y);
+        ctx.lineTo(e.x, e.y + 4);
+        ctx.closePath();
+        ctx.fill();
+      } else if (e.type === 'bomber') {
+        // Wide twin-cannon bomber
+        ctx.fillRect(e.x, e.y + 4, e.width, e.height - 8);
+        ctx.fillRect(e.x + 3, e.y + 12, 5, 10);
+        ctx.fillRect(e.x + e.width - 8, e.y + 12, 5, 10);
+      } else if (e.type === 'splitter' || e.type === 'drone') {
+        // Split-core orb
+        ctx.fillRect(e.x + 3, e.y + 2, e.width - 6, e.height - 4);
+        ctx.fillStyle = '#090a0f';
+        ctx.fillRect(e.x + e.width / 2 - 1, e.y + 2, 2, e.height - 4);
+      } else if (e.type === 'phantom') {
+        // Ghostly jagged silhouette
+        ctx.fillRect(e.x + 4, e.y, e.width - 8, e.height - 4);
+        ctx.fillRect(e.x + 2, e.y + 14, 5, 7);
+        ctx.fillRect(e.x + 12, e.y + 14, 6, 7);
+        ctx.fillRect(e.x + e.width - 7, e.y + 14, 5, 7);
+      } else {
+        // Grunt & Stalker classic invader silhouette
+        ctx.fillRect(e.x + 4, e.y, e.width - 8, e.height - 4);
+        ctx.fillRect(e.x, e.y + 6, e.width, e.height - 10);
+        ctx.fillStyle = '#090a0f';
+        ctx.fillRect(e.x + 7, e.y + 7, 4, 4);
+        ctx.fillRect(e.x + e.width - 11, e.y + 7, 4, 4);
+      }
+
+      ctx.restore();
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Stars
+      ctx.fillStyle = '#ffffff';
+      stars.forEach(s => {
+        ctx.globalAlpha = s.size / 2;
+        ctx.fillRect(s.x, s.y, s.size, s.size);
+      });
+      ctx.globalAlpha = 1;
+
+      if (!gameRunning) return;
+
+      // Player Ship
+      if (!gameOver && (invulnTimer === 0 || Math.floor(invulnTimer / 6) % 2 === 0)) {
+        ctx.fillStyle = '#05d9e8';
+        ctx.beginPath();
+        ctx.moveTo(player.x + player.width / 2, player.y);
+        ctx.lineTo(player.x + player.width, player.y + player.height);
+        ctx.lineTo(player.x + player.width / 2, player.y + player.height - 6);
+        ctx.lineTo(player.x, player.y + player.height);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // Player Bullets
+      ctx.fillStyle = '#05d9e8';
+      playerBullets.forEach(b => ctx.fillRect(b.x, b.y, b.width, b.height));
+
+      // UFO Mothership (#8)
+      if (ufo) {
+        ctx.fillStyle = '#ff007f';
+        ctx.fillRect(ufo.x + 10, ufo.y, ufo.width - 20, 6);
+        ctx.fillRect(ufo.x, ufo.y + 6, ufo.width, 8);
+        ctx.fillStyle = '#ffbe0b';
+        ctx.fillRect(ufo.x + 8, ufo.y + 8, 4, 4);
+        ctx.fillRect(ufo.x + 19, ufo.y + 8, 4, 4);
+        ctx.fillRect(ufo.x + 30, ufo.y + 8, 4, 4);
+      }
+
+      // Formation Enemies (#1 - #7)
+      enemies.forEach(drawEnemy);
+
+      // Enemy Bullets
+      enemyBullets.forEach(eb => {
+        ctx.fillStyle = eb.color;
+        ctx.fillRect(eb.x, eb.y, eb.width, eb.height);
+      });
+
+      // Particles
+      particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = Math.max(0, p.life / 40);
+        ctx.fillRect(p.x, p.y, 3, 3);
+      });
+      ctx.globalAlpha = 1;
+
+      // Game Over Screen
+      if (gameOver) {
+        ctx.fillStyle = 'rgba(9, 10, 15, 0.84)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#ff2a6d';
+        ctx.font = 'bold 48px "Courier New", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('SHIP DESTROYED', canvas.width / 2, canvas.height / 2 - 30);
+
+        ctx.fillStyle = '#e0e6ed';
+        ctx.font = '20px "Courier New", monospace';
+        ctx.fillText(`MODE: ${currentDiff.label}  |  WAVE: ${wave}`, canvas.width / 2, canvas.height / 2 + 15);
+        ctx.fillText(`FINAL SCORE: ${score}`, canvas.width / 2, canvas.height / 2 + 45);
+
+        ctx.fillStyle = '#05d9e8';
+        ctx.font = '18px "Courier New", monospace';
+        ctx.fillText('PRESS [R] TO RETRY  |  [ESC] CHANGE MODE', canvas.width / 2, canvas.height / 2 + 95);
+      }
+    }
+
+    function gameLoop() {
+      update();
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
