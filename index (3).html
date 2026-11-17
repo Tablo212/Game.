@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>3D Space Invaders - Nightmare Boss Edition</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #030308;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      user-select: none;
+    }
+    canvas { display: block; }
+
+    /* Top HUD */
+    #hud {
+      position: absolute;
+      top: 15px; left: 20px; right: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      pointer-events: none;
+    }
+    .hud-panel {
+      background: rgba(10, 12, 24, 0.85);
+      border: 1px solid #334;
+      padding: 12px 18px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.6);
+    }
+    .stat-row { font-size: 16px; font-weight: bold; margin-bottom: 6px; }
+    .hp-bar-bg, .xp-bar-bg {
+      width: 220px; height: 12px;
+      background: #222; border-radius: 6px; overflow: hidden;
+      margin-bottom: 8px; border: 1px solid #444;
+    }
+    #hp-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #ff2a55, #ff5500); transition: width 0.15s; }
+    #xp-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #00d2ff, #3a7bd5); transition: width 0.15s; }
+
+    .wave-center { text-align: center; }
+    .wave-title { font-size: 24px; font-weight: 900; color: #ff2a55; letter-spacing: 2px; text-shadow: 0 0 10px rgba(255,42,85,0.6); }
+    .wave-sub { font-size: 14px; color: #aaa; margin-top: 4px; }
+
+    /* Boss Health Bar */
+    #boss-hud {
+      position: absolute;
+      top: 95px; left: 50%; transform: translateX(-50%);
+      width: 500px; display: none; text-align: center;
+      pointer-events: none;
+    }
+    #boss-name { font-size: 18px; font-weight: 900; color: #d000ff; letter-spacing: 2px; margin-bottom: 5px; text-shadow: 0 0 10px #d000ff; }
+    #boss-bar-bg { width: 100%; height: 18px; background: #1a0022; border: 2px solid #d000ff; border-radius: 9px; overflow: hidden; }
+    #boss-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #9000ff, #ff0077); transition: width 0.1s; }
+
+    /* Warning Banner */
+    #warning-banner {
+      position: absolute;
+      top: 40%; left: 50%; transform: translate(-50%, -50%);
+      font-size: 36px; font-weight: 900; color: #ff0044;
+      background: rgba(0,0,0,0.8); padding: 15px 40px;
+      border-top: 3px solid #ff0044; border-bottom: 3px solid #ff0044;
+      letter-spacing: 3px; display: none; pointer-events: none;
+      animation: pulse 0.5s infinite alternate;
+    }
+    @keyframes pulse { from { opacity: 0.5; transform: translate(-50%, -50%) scale(0.98); } to { opacity: 1; transform: translate(-50%, -50%) scale(1.02); } }
+
+    /* Overlays (Level Up, Shop, Game Over) */
+    .overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(5, 6, 15, 0.9);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+    }
+    .overlay h1 { font-size: 40px; margin: 0 0 10px 0; color: #ff2a55; letter-spacing: 2px; }
+    .overlay p { font-size: 18px; color: #ccc; margin: 0 0 25px 0; }
+
+    .card-grid {
+      display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; max-width: 850px; margin-bottom: 25px;
+    }
+    .card {
+      background: #121526; border: 2px solid #334; border-radius: 10px;
+      padding: 18px; width: 220px; text-align: center; cursor: pointer;
+      transition: transform 0.15s, border-color 0.15s;
+    }
+    .card:hover:not(.disabled) { transform: translateY(-5px); border-color: #00d2ff; background: #181d36; }
+    .card.disabled { opacity: 0.4; cursor: not-allowed; }
+    .card h3 { margin: 0 0 8px 0; color: #00d2ff; font-size: 18px; }
+    .card .desc { font-size: 13px; color: #bbb; margin-bottom: 12px; min-height: 36px; }
+    .card .cost { font-size: 16px; font-weight: bold; color: #ffd700; }
+
+    .action-btn {
+      background: linear-gradient(90deg, #ff2a55, #ff5500);
+      color: #fff; border: none; padding: 14px 36px;
+      font-size: 20px; font-weight: bold; border-radius: 8px;
+      cursor: pointer; letter-spacing: 1px;
+    }
+    .action-btn:hover { filter: brightness(1.15); }
+
+    #controls-hint {
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      color: #778; font-size: 13px; pointer-events: none;
+    }
+  </style>
+  <!-- Load Three.js from reliable CDN with 2D Canvas fallback if offline -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <!-- Top HUD -->
+  <div id="hud">
+    <div class="hud-panel">
+      <div class="stat-row" id="hp-text">HP: 85/85 | Armor: 0</div>
+      <div class="hp-bar-bg"><div id="hp-fill"></div></div>
+      <div class="stat-row" id="xp-text" style="font-size:14px; color:#00d2ff;">LEVEL 1 (0/25 XP)</div>
+      <div class="xp-bar-bg"><div id="xp-fill"></div></div>
+      <div class="stat-row" id="mat-text" style="color:#ffd700; margin-bottom:0;">Materials: 0</div>
+    </div>
+
+    <div class="hud-panel wave-center">
+      <div class="wave-title" id="wave-title">NIGHTMARE WAVE 1</div>
+      <div class="wave-sub" id="wave-stats">Enemies Alive: 0 | Total Kills: 0</div>
+    </div>
+
+    <div class="hud-panel" style="text-align:right;">
+      <div class="stat-row" id="weapon-text" style="color:#00ffaa;">Weapons: 1/6</div>
+      <div class="stat-row" id="dmg-text" style="font-size:14px; color:#ccc;">Laser DMG: 18</div>
+      <div class="stat-row" id="rate-text" style="font-size:14px; color:#ccc; margin-bottom:0;">Fire Rate: 2.5/s</div>
+    </div>
+  </div>
+
+  <!-- Boss Health Bar -->
+  <div id="boss-hud">
+    <div id="boss-name">OVERLORD DREADNOUGHT</div>
+    <div id="boss-bar-bg"><div id="boss-fill"></div></div>
+  </div>
+
+  <div id="warning-banner">WARNING: MINI-BOSS INCOMING!</div>
+
+  <!-- Level Up Overlay -->
+  <div id="levelup-overlay" class="overlay">
+    <h1 style="color:#00d2ff;">LEVEL UP!</h1>
+    <p>Choose a minor survival stat boost:</p>
+    <div class="card-grid" id="levelup-cards"></div>
+  </div>
+
+  <!-- Between-Wave Shop Overlay -->
+  <div id="shop-overlay" class="overlay">
+    <h1 style="color:#ffd700;">WAVE SURVIVED!</h1>
+    <p id="shop-mat-display">Materials Available: 0</p>
+    <div class="card-grid" id="shop-cards"></div>
+    <button class="action-btn" id="next-wave-btn" onclick="startNextWave()">START WAVE 2</button>
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div id="gameover-overlay" class="overlay">
+    <h1>YOU GOT OBLITERATED!</h1>
+    <p id="gameover-stats">Survived to Wave 1 | Total Kills: 0</p>
+    <button class="action-btn" onclick="resetGame()">TRY AGAIN</button>
+  </div>
+
+  <div id="controls-hint">A / D or Left / Right Arrows to Strafe | Auto-Fires Cannons | Hold Spacebar for Overdrive Burst</div>
+
+  <script>
+    // ==========================================
+    // 1. 3D SCENE SETUP (THREE.JS)
+    // ==========================================
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x030308, 0.014);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 18, 26);
+    camera.lookAt(0, 0, -6);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0x404060, 1.5);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    dirLight.position.set(10, 25, 15);
+    scene.add(dirLight);
+
+    // Starfield & Grid Floor
+    const gridHelper = new THREE.GridHelper(60, 30, 0x222244, 0x111122);
+    gridHelper.position.y = -1;
+    scene.add(gridHelper);
+
+    const starGeo = new THREE.BufferGeometry();
+    const starCoords = [];
+    for (let i = 0; i < 600; i++) {
+      starCoords.push((Math.random() - 0.5) * 140, (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 140);
+    }
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starCoords, 3));
+    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0x8899ff, size: 0.35 }));
+    scene.add(stars);
+
+    // ==========================================
+    // 2. GAME STATE & NERFED NIGHTMARE STATS
+    // ==========================================
+    let wave = 1;
+    let kills = 0;
+    let materials = 0;
+    let level = 1;
+    let xp = 0;
+    let xpToNext = 25;
+    let isPaused = false;
+    let isGameOver = false;
+
+    const player = {
+      x: 0,
+      z: 14,
+      speed: 0.32,
+      hp: 85,
+      maxHp: 85,
+      armor: 0,
+      damage: 18,
+      fireDelay: 400, // ms (2.5 shots/sec)
+      weapons: 1,
+      maxWeapons: 6,
+      lastShot: 0
+    };
+
+    // Expensive scaling shop costs
+    let shopCosts = {
+      weapon: 180,
+      damage: 120,
+      rate: 140,
+      armor: 150,
+      repair: 90
+    };
+
+    // Create 3D Player Ship
+    const playerGroup = new THREE.Group();
+    const hullMat = new THREE.MeshStandardMaterial({ color: 0x00ffaa, metalness: 0.6, roughness: 0.3 });
+    const wingMat = new THREE.MeshStandardMaterial({ color: 0x0088ff, metalness: 0.5, roughness: 0.4 });
+    
+    const bodyMesh = new THREE.Mesh(new THREE.ConeGeometry(1.1, 3.2, 6), hullMat);
+    bodyMesh.rotation.x = -Math.PI / 2;
+    playerGroup.add(bodyMesh);
+
+    const wingMesh = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.25, 1.1), wingMat);
+    wingMesh.position.z = 0.5;
+    playerGroup.add(wingMesh);
+
+    playerGroup.position.set(player.x, 0, player.z);
+    scene.add(playerGroup);
+
+    // Entities
+    let enemies = [];
+    let playerBullets = [];
+    let enemyBullets = [];
+    let drops = [];
+    let particles = [];
+    let boss = null;
+    let enemyDir = 1;
+    let enemySpeed = 0.06;
+
+    const keys = {};
+    window.addEventListener('keydown', e => keys[e.code] = true);
+    window.addEventListener('keyup', e => keys[e.code] = false);
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ==========================================
+    // 3. WAVE & BOSS SPAWNING
+    // ==========================================
+    function spawnWave() {
+      clearEntities();
+      boss = null;
+      document.getElementById('boss-hud').style.display = 'none';
+
+      const isBossWave = wave % 3 === 0;
+      const rows = Math.min(5, 3 + Math.floor(wave / 2));
+      const cols = Math.min(9, 6 + Math.floor(wave / 2));
+      const baseHp = Math.floor(24 * Math.pow(1.45, wave - 1));
+      enemySpeed = 0.055 + (wave * 0.012);
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const isHeavy = r === 0 && wave > 1;
+          const hp = Math.floor(baseHp * (isHeavy ? 2.2 : 1));
+          const color = isHeavy ? 0xb000ff : (r === 1 ? 0xff6600 : 0xff1144);
+          
+          const geo = isHeavy ? new THREE.OctahedronGeometry(1.1) : new THREE.BoxGeometry(1.5, 0.9, 1.3);
+          const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.3, metalness: 0.5 });
+          const mesh = new THREE.Mesh(geo, mat);
+
+          const x = (c - (cols - 1) / 2) * 3.1;
+          const z = -18 + r * 2.8;
+          mesh.position.set(x, 0, z);
+          scene.add(mesh);
+
+          enemies.push({
+            mesh, x, z, hp, maxHp: hp,
+            isHeavy,
+            xpValue: isHeavy ? 12 : 6,
+            matValue: Math.floor((8 + wave * 3) * (isHeavy ? 2 : 1))
+          });
+        }
+      }
+
+      // Spawn Nightmare Mini-Boss every 3rd wave
+      if (isBossWave) {
+        showWarning();
+        const bossHp = Math.floor(650 * Math.pow(1.6, Math.floor(wave / 3) - 1));
+        const bossGeo = new THREE.DodecahedronGeometry(3.0);
+        const bossMat = new THREE.MeshStandardMaterial({ color: 0xd000ff, emissive: 0x330055, metalness: 0.8, roughness: 0.2 });
+        const bossMesh = new THREE.Mesh(bossGeo, bossMat);
+        bossMesh.position.set(0, 1.2, -23);
+        scene.add(bossMesh);
+
+        boss = {
+          mesh: bossMesh,
+          x: 0, z: -23,
+          hp: bossHp, maxHp: bossHp,
+          dir: 1, speed: 0.09 + (wave * 0.008),
+          lastShot: 0
+        };
+
+        document.getElementById('boss-hud').style.display = 'block';
+        document.getElementById('boss-name').textContent = `WAVE ${wave} OVERLORD DREADNOUGHT`;
+        updateBossHUD();
+      }
+
+      updateHUD();
+    }
+
+    function showWarning() {
+      const banner = document.getElementById('warning-banner');
+      banner.style.display = 'block';
+      setTimeout(() => { banner.style.display = 'none'; }, 2800);
+    }
+
+    function clearEntities() {
+      enemies.forEach(e => scene.remove(e.mesh));
+      playerBullets.forEach(b => scene.remove(b.mesh));
+      enemyBullets.forEach(b => scene.remove(b.mesh));
+      drops.forEach(d => scene.remove(d.mesh));
+      if (boss) scene.remove(boss.mesh);
+      enemies = []; playerBullets = []; enemyBullets = []; drops = [];
+    }
+
+    // ==========================================
+    // 4. WEAPONS, DROPS & LEVELING
+    // ==========================================
+    function fireWeapons(now) {
+      const overdrive = keys['Space'] ? 0.85 : 1.0;
+      if (now - player.lastShot < player.fireDelay * overdrive) return;
+      player.lastShot = now;
+
+      const spread = 0.55;
+      const startX = player.x - ((player.weapons - 1) * spread) / 2;
+
+      for (let i = 0; i < player.weapons; i++) {
+        const bGeo = new THREE.CylinderGeometry(0.12, 0.12, 1.4, 6);
+        bGeo.rotateX(Math.PI / 2);
+        const bMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+        const mesh = new THREE.Mesh(bGeo, bMat);
+        
+        const bx = startX + i * spread;
+        mesh.position.set(bx, 0, player.z - 1.6);
+        scene.add(mesh);
+
+        playerBullets.push({
+          mesh, x: bx, z: player.z - 1.6,
+          vx: (i - (player.weapons - 1) / 2) * 0.03,
+          vz: -0.75,
+          damage: player.damage
+        });
+      }
+    }
+
+    function spawnDrop(x, z, matVal, xpVal) {
+      const geo = new THREE.OctahedronGeometry(0.45);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(x, 0, z);
+      scene.add(mesh);
+      drops.push({ mesh, x, z, matVal, xpVal });
+    }
+
+    function spawnExplosion(x, z, color, count = 8) {
+      for (let i = 0; i < count; i++) {
+        const mesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.25, 0.25, 0.25),
+          new THREE.MeshBasicMaterial({ color })
+        );
+        mesh.position.set(x, 0, z);
+        scene.add(mesh);
+        particles.push({
+          mesh,
+          vx: (Math.random() - 0.5) * 0.4,
+          vy: Math.random() * 0.3,
+          vz: (Math.random() - 0.5) * 0.4,
+          life: 22
+        });
+      }
+    }
+
+    function gainXP(amount) {
+      xp += amount;
+      if (xp >= xpToNext) {
+        xp -= xpToNext;
+        level++;
+        xpToNext = Math.floor(xpToNext * 1.45);
+        openLevelUp();
+      }
+      updateHUD();
+    }
+
+    // Minor nerfed level-up boosts
+    function openLevelUp() {
+      isPaused = true;
+      const overlay = document.getElementById('levelup-overlay');
+      const container = document.getElementById('levelup-cards');
+      container.innerHTML = '';
+
+      const options = [
+        { title: '+5 Max HP', desc: 'Slightly reinforce ship hull integrity.', apply: () => { player.maxHp += 5; player.hp += 5; } },
+        { title: '+3 Laser DMG', desc: 'Minor boost to cannon output.', apply: () => { player.damage += 3; } },
+        { title: '+6% Fire Rate', desc: 'Slightly faster weapon cycling.', apply: () => { player.fireDelay = Math.max(110, Math.floor(player.fireDelay * 0.94)); } },
+        { title: '+1 Armor', desc: 'Reduces incoming plasma damage by 1.', apply: () => { player.armor += 1; } }
+      ];
+
+      options.forEach(opt => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `<h3>${opt.title}</h3><div class="desc">${opt.desc}</div><div class="cost" style="color:#00ffaa;">FREE BOOST</div>`;
+        card.onclick = () => {
+          opt.apply();
+          overlay.style.display = 'none';
+          isPaused = false;
+          updateHUD();
+        };
+        container.appendChild(card);
+      });
+
+      overlay.style.display = 'flex';
+    }
+
+    // ==========================================
+    // 5. EXPENSIVE BETWEEN-WAVE SHOP
+    // ==========================================
+    function openShop() {
+      isPaused = true;
+      document.getElementById('next-wave-btn').textContent = `START WAVE ${wave + 1}`;
+      renderShop();
+      document.getElementById('shop-overlay').style.display = 'flex';
+    }
+
+    function renderShop() {
+      document.getElementById('shop-mat-display').textContent = `Materials Available: ${materials}`;
+      const container = document.getElementById('shop-cards');
+      container.innerHTML = '';
+
+      const items = [
+        {
+          key: 'weapon',
+          title: `+1 Cannon (${player.weapons}/${player.maxWeapons})`,
+          desc: 'Add an extra parallel laser barrel.',
+          cost: shopCosts.weapon,
+          disabled: materials < shopCosts.weapon || player.weapons >= player.maxWeapons,
+          buy: () => {
+            materials -= shopCosts.weapon;
+            player.weapons++;
+            shopCosts.weapon = Math.floor(shopCosts.weapon * 2.2);
+          }
+        },
+        {
+          key: 'damage',
+          title: 'Heavy Coils (+10 DMG)',
+          desc: 'Increase base damage of every barrel.',
+          cost: shopCosts.damage,
+          disabled: materials < shopCosts.damage,
+          buy: () => {
+            materials -= shopCosts.damage;
+            player.damage += 10;
+            shopCosts.damage = Math.floor(shopCosts.damage * 1.75);
+          }
+        },
+        {
+          key: 'rate',
+          title: 'Overclock (+12% Rate)',
+          desc: 'Reduce firing cooldown.',
+          cost: shopCosts.rate,
+          disabled: materials < shopCosts.rate,
+          buy: () => {
+            materials -= shopCosts.rate;
+            player.fireDelay = Math.max(95, Math.floor(player.fireDelay * 0.88));
+            shopCosts.rate = Math.floor(shopCosts.rate * 1.8);
+          }
+        },
+        {
+          key: 'armor',
+          title: 'Titanium Plating (+2)',
+          desc: 'Flat damage reduction per hit.',
+          cost: shopCosts.armor,
+          disabled: materials < shopCosts.armor,
+          buy: () => {
+            materials -= shopCosts.armor;
+            player.armor += 2;
+            shopCosts.armor = Math.floor(shopCosts.armor * 1.9);
+          }
+        },
+        {
+          key: 'repair',
+          title: 'Hull Patch (+25 HP)',
+          desc: 'Emergency field repairs.',
+          cost: shopCosts.repair,
+          disabled: materials < shopCosts.repair || player.hp >= player.maxHp,
+          buy: () => {
+            materials -= shopCosts.repair;
+            player.hp = Math.min(player.maxHp, player.hp + 25);
+            shopCosts.repair = Math.floor(shopCosts.repair * 1.45);
+          }
+        }
+      ];
+
+      items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'card' + (item.disabled ? ' disabled' : '');
+        const costLabel = (item.key === 'weapon' && player.weapons >= player.maxWeapons) ? 'MAXED' : `${item.cost} Materials`;
+        card.innerHTML = `<h3>${item.title}</h3><div class="desc">${item.desc}</div><div class="cost">${costLabel}</div>`;
+        if (!item.disabled) {
+          card.onclick = () => {
+            item.buy();
+            updateHUD();
+            renderShop();
+          };
+        }
+        container.appendChild(card);
+      });
+    }
+
+    function startNextWave() {
+      wave++;
+      document.getElementById('shop-overlay').style.display = 'none';
+      isPaused = false;
+      spawnWave();
+    }
+
+    // ==========================================
+    // 6. HUD & GAME OVER
+    // ==========================================
+    function updateHUD() {
+      document.getElementById('hp-text').textContent = `HP: ${Math.max(0, player.hp)}/${player.maxHp} | Armor: ${player.armor}`;
+      document.getElementById('hp-fill').style.width = `${Math.max(0, (player.hp / player.maxHp) * 100)}%`;
+      document.getElementById('xp-text').textContent = `LEVEL ${level} (${xp}/${xpToNext} XP)`;
+      document.getElementById('xp-fill').style.width = `${Math.min(100, (xp / xpToNext) * 100)}%`;
+      document.getElementById('mat-text').textContent = `Materials: ${materials}`;
+
+      const aliveCount = enemies.length + (boss ? 1 : 0);
+      document.getElementById('wave-title').textContent = `NIGHTMARE WAVE ${wave}`;
+      document.getElementById('wave-stats').textContent = `Enemies Alive: ${aliveCount} | Total Kills: ${kills}`;
+
+      document.getElementById('weapon-text').textContent = `Weapons: ${player.weapons}/${player.maxWeapons}`;
+      document.getElementById('dmg-text').textContent = `Laser DMG: ${player.damage}`;
+      document.getElementById('rate-text').textContent = `Fire Rate: ${(1000 / player.fireDelay).toFixed(1)}/s`;
+    }
+
+    function updateBossHUD() {
+      if (!boss) return;
+      document.getElementById('boss-fill').style.width = `${Math.max(0, (boss.hp / boss.maxHp) * 100)}%`;
+    }
+
+    function triggerGameOver() {
+      isGameOver = true;
+      document.getElementById('gameover-stats').textContent = `Survived to Wave ${wave} | Level ${level} | Total Kills: ${kills}`;
+      document.getElementById('gameover-overlay').style.display = 'flex';
+    }
+
+    function resetGame() {
+      wave = 1; kills = 0; materials = 0; level = 1; xp = 0; xpToNext = 25;
+      isGameOver = false; isPaused = false;
+      player.x = 0; player.hp = 85; player.maxHp = 85; player.armor = 0;
+      player.damage = 18; player.fireDelay = 400; player.weapons = 1;
+      playerGroup.position.x = 0;
+      shopCosts = { weapon: 180, damage: 120, rate: 140, armor: 150, repair: 90 };
+      document.getElementById('gameover-overlay').style.display = 'none';
+      spawnWave();
+    }
+
+    // ==========================================
+    // 7. MAIN 3D SIMULATION LOOP
+    // ==========================================
+    function animate(now) {
+      requestAnimationFrame(animate);
+      stars.rotation.y += 0.0004;
+
+      if (isPaused || isGameOver) {
+        renderer.render(scene, camera);
+        return;
+      }
+
+      // Player Movement & Tilt
+      let move = 0;
+      if ((keys['ArrowLeft'] || keys['KeyA']) && player.x > -16) move = -1;
+      if ((keys['ArrowRight'] || keys['KeyD']) && player.x < 16) move = 1;
+      player.x += move * player.speed;
+      playerGroup.position.x = player.x;
+      playerGroup.rotation.z = THREE.MathUtils.lerp(playerGroup.rotation.z, -move * 0.35, 0.15);
+
+      fireWeapons(now);
+
+      // Update Player Bullets
+      for (let i = playerBullets.length - 1; i >= 0; i--) {
+        const b = playerBullets[i];
+        b.x += b.vx;
+        b.z += b.vz;
+        b.mesh.position.set(b.x, 0, b.z);
+
+        let hit = false;
+
+        // Check Boss Hit
+        if (boss && Math.abs(b.x - boss.x) < 3.0 && Math.abs(b.z - boss.z) < 2.8) {
+          boss.hp -= b.damage;
+          hit = true;
+          spawnExplosion(b.x, b.z, 0xd000ff, 4);
+          updateBossHUD();
+          if (boss.hp <= 0) {
+            spawnExplosion(boss.x, boss.z, 0xff00aa, 30);
+            spawnDrop(boss.x, boss.z, 120 + wave * 25, 60);
+            scene.remove(boss.mesh);
+            boss = null;
+            kills++;
+            document.getElementById('boss-hud').style.display = 'none';
+            updateHUD();
+          }
+        }
+
+        // Check Enemy Hit
+        if (!hit) {
+          for (let j = enemies.length - 1; j >= 0; j--) {
+            const e = enemies[j];
+            if (Math.abs(b.x - e.x) < 1.1 && Math.abs(b.z - e.z) < 1.0) {
+              e.hp -= b.damage;
+              hit = true;
+              spawnExplosion(b.x, b.z, 0x00ffff, 3);
+              if (e.hp <= 0) {
+                spawnExplosion(e.x, e.z, 0xff5500, 10);
+                spawnDrop(e.x, e.z, e.matValue, e.xpValue);
+                scene.remove(e.mesh);
+                enemies.splice(j, 1);
+                kills++;
+                updateHUD();
+              }
+              break;
+            }
+          }
+        }
+
+        if (hit || b.z < -32) {
+          scene.remove(b.mesh);
+          playerBullets.splice(i, 1);
+        }
+      }
+
+      // Move Enemies
+      let hitEdge = false;
+      const fireProb = 0.0018 + (wave * 0.0008);
+
+      enemies.forEach(e => {
+        e.x += enemyDir * enemySpeed;
+        e.mesh.position.x = e.x;
+        e.mesh.rotation.y += 0.03;
+        if (Math.abs(e.x) > 16.5) hitEdge = true;
+
+        if (Math.random() < fireProb) {
+          const ebMesh = new THREE.Mesh(
+            new THREE.SphereGeometry(0.32, 8, 8),
+            new THREE.MeshBasicMaterial({ color: 0xff2244 })
+          );
+          ebMesh.position.set(e.x, 0, e.z + 0.8);
+          scene.add(ebMesh);
+          enemyBullets.push({
+            mesh: ebMesh, x: e.x, z: e.z + 0.8,
+            vx: 0, vz: 0.24 + wave * 0.025,
+            damage: 14 + wave * 4
+          });
+        }
+      });
+
+      if (hitEdge) {
+        enemyDir *= -1;
+        enemies.forEach(e => {
+          e.z += 1.4;
+          e.mesh.position.z = e.z;
+          if (e.z >= player.z - 1.2) {
+            player.hp = 0;
+            updateHUD();
+            triggerGameOver();
+          }
+        });
+      }
+
+      // Update Boss Movement & Radial Burst Attack
+      if (boss) {
+        boss.x += boss.dir * boss.speed;
+        if (Math.abs(boss.x) > 13) boss.dir *= -1;
+        boss.mesh.position.x = boss.x;
+        boss.mesh.rotation.y += 0.02;
+        boss.mesh.rotation.x += 0.01;
+
+        if (now - boss.lastShot > Math.max(900, 2100 - wave * 80)) {
+          boss.lastShot = now;
+          for (let angle = -0.35; angle <= 0.35; angle += 0.175) {
+            const ebMesh = new THREE.Mesh(
+              new THREE.SphereGeometry(0.45, 8, 8),
+              new THREE.MeshBasicMaterial({ color: 0xd000ff })
+            );
+            ebMesh.position.set(boss.x, 0.5, boss.z + 2.5);
+            scene.add(ebMesh);
+            enemyBullets.push({
+              mesh: ebMesh, x: boss.x, z: boss.z + 2.5,
+              vx: Math.sin(angle) * 0.28,
+              vz: Math.cos(angle) * 0.28,
+              damage: 20 + wave * 4
+            });
+          }
+        }
+      }
+
+      // Update Enemy Bullets
+      for (let i = enemyBullets.length - 1; i >= 0; i--) {
+        const eb = enemyBullets[i];
+        eb.x += eb.vx;
+        eb.z += eb.vz;
+        eb.mesh.position.set(eb.x, 0, eb.z);
+
+        if (Math.abs(eb.x - player.x) < 1.3 && Math.abs(eb.z - player.z) < 1.1) {
+          const finalDmg = Math.max(2, eb.damage - player.armor);
+          player.hp -= finalDmg;
+          spawnExplosion(eb.x, eb.z, 0xff2244, 6);
+          scene.remove(eb.mesh);
+          enemyBullets.splice(i, 1);
+          updateHUD();
+          if (player.hp <= 0) triggerGameOver();
+          continue;
+        }
+
+        if (eb.z > 22) {
+          scene.remove(eb.mesh);
+          enemyBullets.splice(i, 1);
+        }
+      }
+
+      // Magnetize & Collect Material/XP Drops
+      for (let i = drops.length - 1; i >= 0; i--) {
+        const d = drops[i];
+        d.z += 0.14;
+        d.mesh.rotation.y += 0.08;
+
+        // Magnetic pull when near player
+        const dx = player.x - d.x;
+        const dz = player.z - d.z;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 7) {
+          d.x += (dx / dist) * 0.28;
+          d.z += (dz / dist) * 0.28;
+        }
+        d.mesh.position.set(d.x, 0, d.z);
+
+        if (dist < 1.6) {
+          materials += d.matVal;
+          gainXP(d.xpVal);
+          scene.remove(d.mesh);
+          drops.splice(i, 1);
+          updateHUD();
+          continue;
+        }
+
+        if (d.z > 22) {
+          scene.remove(d.mesh);
+          drops.splice(i, 1);
+        }
+      }
+
+      // Update Explosion Particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.mesh.position.x += p.vx;
+        p.mesh.position.y += p.vy;
+        p.mesh.position.z += p.vz;
+        p.life--;
+        if (p.life <= 0) {
+          scene.remove(p.mesh);
+          particles.splice(i, 1);
+        }
+      }
+
+      // Wave Cleared Check
+      if (enemies.length === 0 && !boss && !isGameOver) {
+        openShop();
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    spawnWave();
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
