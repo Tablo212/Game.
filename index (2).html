@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hardcore Space Invaders</title>
+  <style>
+    body {
+      margin: 0;
+      background-color: #09090d;
+      color: #fff;
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      user-select: none;
+    }
+    .hud {
+      width: 650px;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 10px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .hud span { color: #0f0; }
+    #hp-display span { color: #f33; }
+    #credits-display span { color: #fd0; }
+    
+    .game-container {
+      position: relative;
+      width: 650px;
+      height: 550px;
+    }
+    canvas {
+      background-color: #000;
+      border: 2px solid #f05;
+      box-shadow: 0 0 20px rgba(255, 0, 85, 0.4);
+      display: block;
+    }
+    
+    /* Upgrade Shop Overlay */
+    #shop-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(5, 5, 12, 0.92);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    #shop-overlay h2 {
+      color: #fd0;
+      margin-bottom: 5px;
+      font-size: 28px;
+    }
+    #shop-overlay p {
+      color: #aaa;
+      margin-bottom: 20px;
+    }
+    .upgrade-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      width: 85%;
+      margin-bottom: 25px;
+    }
+    .upgrade-btn {
+      background: #161622;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+      transition: 0.15s;
+    }
+    .upgrade-btn:hover:not(:disabled) {
+      border-color: #fd0;
+      background: #222233;
+    }
+    .upgrade-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .upgrade-title {
+      font-weight: bold;
+      color: #0ff;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .upgrade-cost {
+      color: #fd0;
+      font-size: 14px;
+    }
+    #next-wave-btn {
+      background: #f05;
+      color: #fff;
+      border: none;
+      padding: 12px 30px;
+      font-size: 18px;
+      font-family: inherit;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    #next-wave-btn:hover { background: #ff2266; }
+
+    /* Game Over Overlay */
+    #gameover-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(15, 0, 0, 0.88);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    #gameover-overlay h1 { color: #f00; font-size: 42px; margin: 0 0 10px 0; }
+    .controls {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="hud">
+    <div>WAVE: <span id="wave-val">1</span></div>
+    <div id="hp-display">HULL: <span id="hp-val">100/100</span></div>
+    <div id="credits-display">CREDITS: <span id="credits-val">0</span></div>
+    <div>SCORE: <span id="score-val">0</span></div>
+  </div>
+
+  <div class="game-container">
+    <canvas id="gameCanvas" width="650" height="550"></canvas>
+
+    <!-- Between-Wave Upgrade Shop -->
+    <div id="shop-overlay">
+      <h2>WAVE CLEARED</h2>
+      <p>Spend your credits wisely. Enemy armor and aggression increase next wave.</p>
+      <div class="upgrade-grid">
+        <button class="upgrade-btn" id="btn-dmg" onclick="buyUpgrade('dmg')">
+          <span class="upgrade-title">Plasma Damage (+15)</span>
+          <span id="lvl-dmg">Level 1</span> | <span class="upgrade-cost" id="cost-dmg">250 CR</span>
+        </button>
+        <button class="upgrade-btn" id="btn-rate" onclick="buyUpgrade('rate')">
+          <span class="upgrade-title">Fire Rate (+15% Speed)</span>
+          <span id="lvl-rate">Level 1</span> | <span class="upgrade-cost" id="cost-rate">300 CR</span>
+        </button>
+        <button class="upgrade-btn" id="btn-multi" onclick="buyUpgrade('multi')">
+          <span class="upgrade-title">Multi-Shot (+1 Cannon)</span>
+          <span id="lvl-multi">Level 1 (Max 4)</span> | <span class="upgrade-cost" id="cost-multi">800 CR</span>
+        </button>
+        <button class="upgrade-btn" id="btn-repair" onclick="buyUpgrade('repair')">
+          <span class="upgrade-title">Nanobot Repair (+40 HP)</span>
+          <span id="lvl-repair">Max Hull: 100</span> | <span class="upgrade-cost" id="cost-repair">200 CR</span>
+        </button>
+      </div>
+      <button id="next-wave-btn" onclick="startNextWave()">LAUNCH WAVE 2</button>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameover-overlay">
+      <h1>HULL BREACHED</h1>
+      <p id="final-stats" style="font-size: 18px; margin-bottom: 20px;"></p>
+      <button id="next-wave-btn" onclick="resetGame()">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <div class="controls">Left / Right Arrows or A / D to Move | Hold Spacebar to Fire</div>
+
+  <!-- Optional external enemies config inside enemies/index.html -->
+  <script src="enemies/index.html"></script>
+
+  <script>
+    // Built-in default enemy config (used automatically if enemies/index.html is not uploaded yet)
+    const DEFAULT_ENEMY_CONFIG = {
+      baseHp: 15,
+      hpScalePerWave: 1.42,
+      baseSpeed: 1.1,
+      speedPerWave: 0.22,
+      dropDistance: 22,
+      baseFireChance: 0.0012,
+      fireChancePerWave: 0.0006,
+      baseBulletSpeed: 3.5,
+      bulletSpeedPerWave: 0.35,
+      baseBulletDamage: 15,
+      bulletDamagePerWave: 4,
+      maxRows: 6,
+      maxCols: 10,
+      baseCreditReward: 12,
+      creditPerWave: 3,
+      types: {
+        grunt: { color: '#f05', hpMultiplier: 1.0 },
+        elite: { color: '#f70', hpMultiplier: 1.5, minWave: 4 },
+        heavy: { color: '#b0f', hpMultiplier: 2.2, minWave: 2 }
+      }
+    };
+
+    const CFG = (typeof ENEMY_CONFIG !== 'undefined') ? ENEMY_CONFIG : DEFAULT_ENEMY_CONFIG;
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Game State
+    let wave = 1;
+    let score = 0;
+    let credits = 0;
+    let isShopOpen = false;
+    let isGameOver = false;
+    let lastShotTime = 0;
+
+    // Player Stats & Expensive Upgrades
+    const player = {
+      x: canvas.width / 2 - 20,
+      y: canvas.height - 45,
+      width: 40,
+      height: 22,
+      speed: 5.5,
+      hp: 100,
+      maxHp: 100,
+      damage: 15,
+      fireCooldown: 420,
+      cannons: 1
+    };
+
+    const upgrades = {
+      dmg: { level: 1, cost: 250, scale: 1.75 },
+      rate: { level: 1, cost: 300, scale: 1.85 },
+      multi: { level: 1, cost: 800, scale: 2.5, max: 4 },
+      repair: { cost: 200, scale: 1.35 }
+    };
+
+    let playerBullets = [];
+    let enemyBullets = [];
+    let enemies = [];
+    let particles = [];
+    let enemyDirection = 1;
+    let enemySpeed = CFG.baseSpeed;
+
+    const keys = {};
+    document.addEventListener('keydown', (e) => keys[e.code] = true);
+    document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+    function updateHUD() {
+      document.getElementById('wave-val').textContent = wave;
+      document.getElementById('hp-val').textContent = `${Math.max(0, player.hp)}/${player.maxHp}`;
+      document.getElementById('credits-val').textContent = credits;
+      document.getElementById('score-val').textContent = score;
+    }
+
+    function spawnWave() {
+      enemies = [];
+      enemyBullets = [];
+      playerBullets = [];
+      
+      const rows = Math.min(CFG.maxRows, 3 + Math.floor(wave / 2));
+      const cols = Math.min(CFG.maxCols, 7 + Math.floor(wave / 3));
+      const baseHp = Math.floor(CFG.baseHp * Math.pow(CFG.hpScalePerWave, wave - 1));
+      enemySpeed = CFG.baseSpeed + (wave * CFG.speedPerWave);
+
+      const spacingX = 56;
+      const startX = (canvas.width - (cols * spacingX)) / 2 + 10;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          let unitType = 'grunt';
+          if (r === 0 && wave >= CFG.types.heavy.minWave) unitType = 'heavy';
+          else if (r === 1 && wave >= CFG.types.elite.minWave) unitType = 'elite';
+
+          const stats = CFG.types[unitType];
+          const maxEnemyHp = Math.floor(baseHp * stats.hpMultiplier);
+
+          enemies.push({
+            x: startX + c * spacingX,
+            y: 45 + r * 42,
+            width: 36,
+            height: 24,
+            hp: maxEnemyHp,
+            maxHp: maxEnemyHp,
+            color: stats.color,
+            creditValue: Math.floor((CFG.baseCreditReward + wave * CFG.creditPerWave) * stats.hpMultiplier)
+          });
+        }
+      }
+      updateHUD();
+    }
+
+    function firePlayerWeapon(now) {
+      if (now - lastShotTime < player.fireCooldown) return;
+      lastShotTime = now;
+
+      const spread = 10;
+      const totalWidth = (player.cannons - 1) * spread;
+      const startX = player.x + player.width / 2 - totalWidth / 2;
+
+      for (let i = 0; i < player.cannons; i++) {
+        playerBullets.push({
+          x: startX + i * spread - 2,
+          y: player.y - 6,
+          width: 4,
+          height: 14,
+          speed: 8.5,
+          damage: player.damage
+        });
+      }
+    }
+
+    function createExplosion(x, y, color) {
+      for (let i = 0; i < 10; i++) {
+        particles.push({
+          x, y,
+          vx: (Math.random() - 0.5) * 6,
+          vy: (Math.random() - 0.5) * 6,
+          life: 20,
+          color
+        });
+      }
+    }
+
+    function openShop() {
+      isShopOpen = true;
+      document.getElementById('shop-overlay').style.display = 'flex';
+      document.getElementById('next-wave-btn').textContent = `LAUNCH WAVE ${wave + 1}`;
+      refreshShopUI();
+    }
+
+    function refreshShopUI() {
+      document.getElementById('lvl-dmg').textContent = `Level ${upgrades.dmg.level} (${player.damage} DMG)`;
+      document.getElementById('cost-dmg').textContent = `${upgrades.dmg.cost} CR`;
+      document.getElementById('btn-dmg').disabled = credits < upgrades.dmg.cost;
+
+      document.getElementById('lvl-rate').textContent = `Level ${upgrades.rate.level}`;
+      document.getElementById('cost-rate').textContent = `${upgrades.rate.cost} CR`;
+      document.getElementById('btn-rate').disabled = credits < upgrades.rate.cost;
+
+      if (upgrades.multi.level >= upgrades.multi.max) {
+        document.getElementById('lvl-multi').textContent = `MAXED (4 Cannons)`;
+        document.getElementById('cost-multi').textContent = `---`;
+        document.getElementById('btn-multi').disabled = true;
+      } else {
+        document.getElementById('lvl-multi').textContent = `Level ${upgrades.multi.level} / 4`;
+        document.getElementById('cost-multi').textContent = `${upgrades.multi.cost} CR`;
+        document.getElementById('btn-multi').disabled = credits < upgrades.multi.cost;
+      }
+
+      document.getElementById('lvl-repair').textContent = `Hull: ${player.hp}/${player.maxHp}`;
+      document.getElementById('cost-repair').textContent = `${upgrades.repair.cost} CR`;
+      document.getElementById('btn-repair').disabled = credits < upgrades.repair.cost || player.hp >= player.maxHp;
+    }
+
+    function buyUpgrade(type) {
+      if (type === 'dmg' && credits >= upgrades.dmg.cost) {
+        credits -= upgrades.dmg.cost;
+        upgrades.dmg.level++;
+        player.damage += 15;
+        upgrades.dmg.cost = Math.floor(upgrades.dmg.cost * upgrades.dmg.scale);
+      } else if (type === 'rate' && credits >= upgrades.rate.cost) {
+        credits -= upgrades.rate.cost;
+        upgrades.rate.level++;
+        player.fireCooldown = Math.max(90, Math.floor(player.fireCooldown * 0.85));
+        upgrades.rate.cost = Math.floor(upgrades.rate.cost * upgrades.rate.scale);
+      } else if (type === 'multi' && credits >= upgrades.multi.cost && upgrades.multi.level < upgrades.multi.max) {
+        credits -= upgrades.multi.cost;
+        upgrades.multi.level++;
+        player.cannons++;
+        upgrades.multi.cost = Math.floor(upgrades.multi.cost * upgrades.multi.scale);
+      } else if (type === 'repair' && credits >= upgrades.repair.cost && player.hp < player.maxHp) {
+        credits -= upgrades.repair.cost;
+        player.hp = Math.min(player.maxHp, player.hp + 40);
+        upgrades.repair.cost = Math.floor(upgrades.repair.cost * upgrades.repair.scale);
+      }
+      updateHUD();
+      refreshShopUI();
+    }
+
+    function startNextWave() {
+      wave++;
+      isShopOpen = false;
+      document.getElementById('shop-overlay').style.display = 'none';
+      spawnWave();
+    }
+
+    function triggerGameOver() {
+      isGameOver = true;
+      document.getElementById('gameover-overlay').style.display = 'flex';
+      document.getElementById('final-stats').textContent = `Reached Wave ${wave} | Final Score: ${score}`;
+    }
+
+    function resetGame() {
+      wave = 1;
+      score = 0;
+      credits = 0;
+      isGameOver = false;
+      isShopOpen = false;
+      player.hp = 100;
+      player.damage = 15;
+      player.fireCooldown = 420;
+      player.cannons = 1;
+      player.x = canvas.width / 2 - 20;
+
+      upgrades.dmg = { level: 1, cost: 250, scale: 1.75 };
+      upgrades.rate = { level: 1, cost: 300, scale: 1.85 };
+      upgrades.multi = { level: 1, cost: 800, scale: 2.5, max: 4 };
+      upgrades.repair = { cost: 200, scale: 1.35 };
+
+      document.getElementById('gameover-overlay').style.display = 'none';
+      document.getElementById('shop-overlay').style.display = 'none';
+      spawnWave();
+    }
+
+    function update(now) {
+      if (isShopOpen || isGameOver) return;
+
+      if ((keys['ArrowLeft'] || keys['KeyA']) && player.x > 5) player.x -= player.speed;
+      if ((keys['ArrowRight'] || keys['KeyD']) && player.x < canvas.width - player.width - 5) player.x += player.speed;
+      if (keys['Space']) firePlayerWeapon(now);
+
+      for (let i = playerBullets.length - 1; i >= 0; i--) {
+        let b = playerBullets[i];
+        b.y -= b.speed;
+        if (b.y < 0) playerBullets.splice(i, 1);
+      }
+
+      let hitEdge = false;
+      const fireChance = CFG.baseFireChance + (wave * CFG.fireChancePerWave);
+
+      enemies.forEach(enemy => {
+        enemy.x += enemyDirection * enemySpeed;
+        if (enemy.x + enemy.width >= canvas.width - 5 || enemy.x <= 5) {
+          hitEdge = true;
+        }
+
+        if (Math.random() < fireChance) {
+          enemyBullets.push({
+            x: enemy.x + enemy.width / 2 - 3,
+            y: enemy.y + enemy.height,
+            width: 6,
+            height: 14,
+            speed: CFG.baseBulletSpeed + (wave * CFG.bulletSpeedPerWave),
+            damage: CFG.baseBulletDamage + (wave * CFG.bulletDamagePerWave)
+          });
+        }
+      });
+
+      if (hitEdge) {
+        enemyDirection *= -1;
+        enemies.forEach(enemy => {
+          enemy.y += CFG.dropDistance;
+          if (enemy.y + enemy.height >= player.y) {
+            player.hp = 0;
+            updateHUD();
+            triggerGameOver();
+          }
+        });
+      }
+
+      for (let i = enemyBullets.length - 1; i >= 0; i--) {
+        let eb = enemyBullets[i];
+        eb.y += eb.speed;
+
+        if (eb.x < player.x + player.width &&
+            eb.x + eb.width > player.x &&
+            eb.y < player.y + player.height &&
+            eb.y + eb.height > player.y) {
+          player.hp -= eb.damage;
+          createExplosion(eb.x, eb.y, '#f33');
+          enemyBullets.splice(i, 1);
+          updateHUD();
+          if (player.hp <= 0) triggerGameOver();
+          continue;
+        }
+
+        if (eb.y > canvas.height) enemyBullets.splice(i, 1);
+      }
+
+      for (let bi = playerBullets.length - 1; bi >= 0; bi--) {
+        let b = playerBullets[bi];
+        for (let ei = enemies.length - 1; ei >= 0; ei--) {
+          let e = enemies[ei];
+          if (b.x < e.x + e.width &&
+              b.x + b.width > e.x &&
+              b.y < e.y + e.height &&
+              b.y + b.height > e.y) {
+            e.hp -= b.damage;
+            playerBullets.splice(bi, 1);
+            createExplosion(b.x, b.y, '#0ff');
+
+            if (e.hp <= 0) {
+              score += e.maxHp;
+              credits += e.creditValue;
+              createExplosion(e.x + e.width / 2, e.y + e.height / 2, '#fd0');
+              enemies.splice(ei, 1);
+              updateHUD();
+            }
+            break;
+          }
+        }
+      }
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      if (enemies.length === 0 && !isGameOver) {
+        openShop();
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = '#0f0';
+      ctx.fillRect(player.x, player.y, player.width, player.height);
+      ctx.fillStyle = '#0aa';
+      ctx.fillRect(player.x + player.width / 2 - 4, player.y - 6, 8, 6);
+
+      ctx.fillStyle = '#0ff';
+      playerBullets.forEach(b => ctx.fillRect(b.x, b.y, b.width, b.height));
+
+      ctx.fillStyle = '#f33';
+      enemyBullets.forEach(eb => ctx.fillRect(eb.x, eb.y, eb.width, eb.height));
+
+      enemies.forEach(e => {
+        ctx.fillStyle = e.color;
+        ctx.fillRect(e.x, e.y, e.width, e.height);
+
+        if (e.hp < e.maxHp) {
+          const hpPercent = Math.max(0, e.hp / e.maxHp);
+          ctx.fillStyle = '#300';
+          ctx.fillRect(e.x, e.y - 6, e.width, 3);
+          ctx.fillStyle = '#0f0';
+          ctx.fillRect(e.x, e.y - 6, e.width * hpPercent, 3);
+        }
+      });
+
+      particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, 3, 3);
+      });
+    }
+
+    function gameLoop(now) {
+      update(now);
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    spawnWave();
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>

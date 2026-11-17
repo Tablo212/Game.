@@ -1,0 +1,37 @@
+// =========================================================================
+// CUSTOMIZABLE ENEMY SETTINGS
+// Upload this file to GitHub inside an "enemies" folder as: enemies/index.html
+// Edit any numbers or colors below and commit changes to update your game!
+// =========================================================================
+
+const ENEMY_CONFIG = {
+  // Health & Wave Scaling
+  baseHp: 15,                 // Wave 1 enemy starting health
+  hpScalePerWave: 1.42,       // Health multiplier per wave (1.42 = +42% HP each wave)
+
+  // Movement Speed
+  baseSpeed: 1.1,             // Starting horizontal speed
+  speedPerWave: 0.22,         // Speed added every wave
+  dropDistance: 22,           // Pixels enemies drop down when hitting a wall
+
+  // Enemy Weapons & Aggression
+  baseFireChance: 0.0012,     // Starting chance to shoot each frame
+  fireChancePerWave: 0.0006,  // Extra fire chance added per wave
+  baseBulletSpeed: 3.5,       // Speed of red enemy lasers
+  bulletSpeedPerWave: 0.35,   // Laser speed added per wave
+  baseBulletDamage: 15,       // Damage dealt to player hull on hit
+  bulletDamagePerWave: 4,     // Extra damage added per wave
+
+  // Fleet Size & Rewards
+  maxRows: 6,                 // Maximum rows of enemies
+  maxCols: 10,                // Maximum columns of enemies
+  baseCreditReward: 12,       // Credits dropped per kill on Wave 1
+  creditPerWave: 3,           // Extra credits dropped per wave
+
+  // Enemy Ship Classes
+  types: {
+    grunt: { color: '#f05', hpMultiplier: 1.0 },
+    elite: { color: '#f70', hpMultiplier: 1.5, minWave: 4 },
+    heavy: { color: '#b0f', hpMultiplier: 2.2, minWave: 2 }
+  }
+};
